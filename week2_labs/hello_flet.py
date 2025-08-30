@@ -10,7 +10,7 @@ def main(page: ft.Page):
     # Page configuration
     page.title = "CCCS 106 - Hello Flet"
     page.window.width = 500
-    page.window.height = 400
+    page.window.height = 600
     page.padding = 20
     page.theme_mode = ft.ThemeMode.LIGHT
     
@@ -75,9 +75,10 @@ def main(page: ft.Page):
                 ft.TextButton("Close", on_click=lambda e: close_dialog(dialog))
             ]
         )
-        page.dialog = dialog
-        dialog.open = True
-        page.update()
+        # page.dialog = dialog
+        # dialog.open = True
+        # page.update()
+        page.open(dialog)
     
     def close_dialog(dialog):
         dialog.open = False
@@ -135,3 +136,4 @@ def main(page: ft.Page):
 # Run the application
 if __name__ == "__main__":
     ft.app(target=main)
+    

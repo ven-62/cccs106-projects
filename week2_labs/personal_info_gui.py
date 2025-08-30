@@ -67,7 +67,7 @@ def main(page: ft.Page):
     
     # Output container
     output_container = ft.Container(
-        content=ft.Text("Fill out the form and click 'Generate Profile' to see your information."),
+        content=ft.Text("Fill out the form and click 'Generate Profile' to see your information.", color=ft.Colors.BLUE_700),
         bgcolor=ft.Colors.GREY_100,
         padding=15,
         border_radius=10,
@@ -91,16 +91,17 @@ def main(page: ft.Page):
             profile_content = ft.Column([
                 ft.Text("🎓 STUDENT PROFILE", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.INDIGO_700),
                 ft.Divider(),
-                ft.Text(f"👤 Full Name: {first_name.value} {last_name.value}", size=16),
-                ft.Text(f"🆔 Student ID: {student_id.value or 'Not provided'}", size=16),
-                ft.Text(f"🎂 Age: {age.value} years old", size=16),
-                ft.Text(f"📅 Birth Year: {birth_year}", size=16),
-                ft.Text(f"📚 Program: {program_dropdown.value or 'Not selected'}", size=16),
-                ft.Text(f"📊 Year Level: {year_level.value or 'Not selected'}", size=16),
-                ft.Text(f"🎨 Favorite Color: {favorite_color.value or 'Not selected'}", size=16),
-                ft.Text(f"🎯 Hobbies: {hobbies.value or 'Not provided'}", size=16),
+                ft.Text(f"👤 Full Name: {first_name.value} {last_name.value}", size=16, color=ft.Colors.BLUE_700),
+                ft.Text(f"🆔 Student ID: {student_id.value or 'Not provided'}", size=16, color=ft.Colors.BLUE_700),
+                ft.Text(f"🎂 Age: {age.value} years old", size=16, color=ft.Colors.BLUE_700),
+                ft.Text(f"📅 Birth Year: {birth_year}", size=16, color=ft.Colors.BLUE_700),
+                ft.Text(f"📚 Program: {program_dropdown.value or 'Not selected'}", size=16, color=ft.Colors.BLUE_700),
+                ft.Text(f"📊 Year Level: {year_level.value or 'Not selected'}", size=16, color=ft.Colors.BLUE_700),
+                ft.Text(f"🎨 Favorite Color: {favorite_color.value or 'Not selected'}", size=16, color=ft.Colors.BLUE_700),
+                ft.Text(f"🎯 Hobbies: {hobbies.value or 'Not provided'}", size=16, color=ft.Colors.BLUE_700),
                 ft.Divider(),
-                ft.Text(f"🎓 Expected Graduation: {graduation_year}", size=16, weight=ft.FontWeight.BOLD),
+                ft.Text(f"🎓 Expected Graduation: {graduation_year}", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
+                
                 ft.Text(f"📝 Profile generated on: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", 
                        size=12, color=ft.Colors.GREY_600),
             ])
