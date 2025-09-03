@@ -10,7 +10,7 @@
 ### Repository Setup
 - **GitHub Repository:** https://github.com/ven-62/cccs106-projects.git
 - **Local Repository:** ✅ Initialized and connected
-- **Commit History:** 4 commits with descriptive messages
+- **Commit History:** 6 commits with descriptive messages
 
 ### Git Skills Demonstrated
 - ✅ Repository initialization and configuration
@@ -31,7 +31,7 @@
 - **Features:** Form inputs, dropdowns, radio buttons, profile generation
 - **UI Components:** TextField, Dropdown, RadioGroup, Containers, Scrolling
 - **Error Handling:** Input validation and user feedback
-- **Notes:** Enhanced output text color.
+- **Notes:** Enhanced output and clear text color; added age validation; fixed error dialog not in display.
 
 ## Technical Skills Developed
 
@@ -63,9 +63,13 @@ At first run, flet isn't working; solution, I run `pip install flet[all]` on the
 - ![alt text](./lab2_screenshot/git_log.png "Local git log showing commits")
 
 ### GUI Applications
+`hello_flet.py`
 - ![alt text](./lab2_screenshot/hello_flet_output.png "hello_flet.py running with all features") 
 - ![alt text](./lab2_screenshot/hello_flet_appinfo.png "hello_flet.py running with all features") 
-- ![alt text](./lab2_screenshot/personal_gui_output.png "personal_info_gui.py with filled form and generated profile") 
+
+`personal_info_gui.py`
+- ![alt text](./lab2_screenshot/pig_output.png "personal_info_gui.py with filled form and generated profile") 
+- ![alt text](./lab2_screenshot/pig_error.png "personal_info_gui.py with error") 
 
 ## Future Enhancements
 

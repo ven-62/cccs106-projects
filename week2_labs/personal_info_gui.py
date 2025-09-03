@@ -82,6 +82,10 @@ def main(page: ft.Page):
                 show_error("Please fill in all required fields (Name and Age)!")
                 return
             
+            elif not age.value.isdigit() or int(age.value) <= 0:
+                show_error("Please enter a valid age (number only)!")
+                return
+            
             # Calculate birth year
             current_year = datetime.now().year
             birth_year = current_year - int(age.value)
@@ -123,7 +127,7 @@ def main(page: ft.Page):
         year_level.value = None
         favorite_color.value = None
         hobbies.value = ""
-        output_container.content = ft.Text("Form cleared. Fill out the information again.")
+        output_container.content = ft.Text("Form cleared. Fill out the information again.", color=ft.Colors.BLUE_700)
         page.update()
     
     def show_error(message):
@@ -132,9 +136,10 @@ def main(page: ft.Page):
             content=ft.Text(message),
             actions=[ft.TextButton("OK", on_click=lambda e: close_error_dialog(error_dialog))]
         )
-        page.dialog = error_dialog
-        error_dialog.open = True
-        page.update()
+        # page.dialog = error_dialog
+        # error_dialog.open = True
+        # page.update()
+        page.open(error_dialog)
     
     def close_error_dialog(dialog):
         dialog.open = False
