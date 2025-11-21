@@ -32,8 +32,9 @@ This weather app shows users current weather and weather predictions for various
    - A challenge was that user input reset on app close, so I solved it by storing the entered cities in a JSON file.
 
 ## Screenshots
-![Search history](screenshots\search_history.png)
-![Voice input](screenshots\search_history.png)
+![Search history](./screenshots/search_history.png "Search history")
+![Main screen](./screenshots/main_screen.png "Main screen")
+![Voice input](./screenshots/voice_input.png "Voice input")
 
 
 ## Installation
