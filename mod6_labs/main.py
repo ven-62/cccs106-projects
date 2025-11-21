@@ -7,7 +7,10 @@ from pathlib import Path
 import json
 import datetime
 import asyncio
-
+import speech_recognition as sr
+import threading
+import winsound
+import time
 
 class WeatherApp:
     """Main Weather Application class."""
@@ -18,10 +21,17 @@ class WeatherApp:
 
         # Search history
         self.history_file = Path("search_history.json")
-        self.search_history = self.load_history()[:5]
+        self.search_history = self.load_history()
+
+        self.cities_file = Path("cities.json")
+        self.saved_cities = self.load_cities()
 
         self.setup_page()
         self.build_ui()
+
+        self.recognizer = sr.Recognizer()
+        self.mic_stream = None
+        self.listening = False
 
     def setup_page(self):
         """Configure page settings."""
@@ -38,8 +48,7 @@ class WeatherApp:
         self.page.padding = 20
         
         # Window properties are accessed via page.window object in Flet 0.28.3
-        self.page.window.width = Config.APP_WIDTH
-        self.page.window.height = Config.APP_HEIGHT
+        self.page.window.maximized = True
         self.page.window.resizable = False
         self.page.window.center()
     
@@ -62,7 +71,8 @@ class WeatherApp:
 
         # Microphone search button
         self.mic_button = ft.IconButton(
-            icon=ft.Icons.MIC
+            icon=ft.Icons.MIC,
+            on_click=self.mic_click
         )
 
         # City input field
@@ -75,17 +85,34 @@ class WeatherApp:
             autofocus=True,
             expand=True,
             on_submit=self.on_search,
-            on_focus=self.show_history,
+            on_change=self.show_history,
             on_blur=self.hide_history,
+        )
+
+        self.live_text = ft.Text("Say something...", size=16)
+
+        self.done_button = ft.TextButton("Done", on_click=self.stop_listening)
+
+        self.listening_dialog = ft.AlertDialog(
+            modal=True,
+            content=ft.Column(
+                [
+                    ft.Text("Listening...", size=20, weight="bold"),
+                    ft.Container(height=10),
+                    self.live_text
+                ],
+                tight=True,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            actions=[self.done_button],
+            actions_alignment=ft.MainAxisAlignment.CENTER,
         )
 
         # Search history
         self.history_dropdown = ft.Container(
             content=ft.Column(spacing=5),
-            visible=True,
+            visible=False,
             border_radius=2,
             padding=10,
-            # shadow=ft.BoxShadow(blur_radius=1)
         )
         
         # Search button
@@ -109,7 +136,7 @@ class WeatherApp:
             bgcolor=ft.Colors.BLUE_50,
             border_radius=10,
             padding=20,
-            visible=False
+            visible=False,
         )
         
         # Error message
@@ -117,6 +144,21 @@ class WeatherApp:
             "",
             color=ft.Colors.RED_700,
             visible=False,
+            # text_align=ft.TextAlign.CENTER
+        )
+        
+        self.cities_column = ft.Column(
+            spacing=6,
+            scroll=ft.ScrollMode.ALWAYS
+        )
+
+        self.cities_container = ft.Container(
+            content=self.cities_column,
+            border_radius=10,
+            padding=10,
+            height=167,
+            width=680,
+            bgcolor=ft.Colors.WHITE
         )
 
         # Update the Column to include the theme button in the title row
@@ -128,6 +170,7 @@ class WeatherApp:
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         )
 
+        # Search row with search input and search button
         search_row = ft.Column(
             controls=[
                 ft.Row(
@@ -137,30 +180,45 @@ class WeatherApp:
                     ]
                 )
             ],
-            expand=True
+            
         )
 
+        # Container for all the content
         content_row = ft.Container(
             content=ft.Row(
                 [
                     self.weather_container,
                     self.forecast_container
                 ],
-                expand=True,
                 spacing=20,
                 alignment=ft.MainAxisAlignment.CENTER
             )
         )
                 
+        
         # Loading indicator
         self.loading = ft.ProgressRing(visible=False)
 
-        self.update_theme_icon()
-        
+        self.update_theme_colors()
+
         # Add all components to page
         self.page.add(
             ft.Stack(
                 controls=[
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                self.loading,
+                                self.error_message
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=10,
+                        ),
+                        alignment=ft.alignment.center,
+                        top=200,
+                        right=20,
+                        left=20
+                    ),
                     # MAIN PAGE CONTENT
                     ft.Column(
                         [
@@ -168,23 +226,155 @@ class WeatherApp:
                             ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
                             search_row,
                             ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
-                            self.loading,
-                            self.error_message,
                             content_row,
                         ],
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        horizontal_alignment=ft.CrossAxisAlignment.START,
                         spacing=10,
                     ),
                     # FLOATING DROPDOWN
                     ft.Container(
-                        top=137,   # Position relative to entire page
+                        top=137,
                         left=40,
                         right=50,
                         content=self.history_dropdown
                     ),
+                    self.listening_dialog
+                ],
+                expand=True
+            )
+        )
+    
+    def load_cities(self):
+        """Load saved cities from JSON file."""
+        if self.cities_file.exists():
+            with open(self.cities_file, "r") as f:
+                try:
+                    return json.load(f)
+                except json.JSONDecodeError:
+                    return []
+        return []
+
+    async def load_saved_city_cards(self):
+        """Fetch weather for saved cities and add cards to UI."""
+        for city in self.saved_cities:
+            try:
+                data = await self.weather_service.get_weather(city)
+                temp = data["main"]["temp"]
+                desc = data["weather"][0]["description"].title()
+                self.add_city_card(city, temp, desc)
+            except Exception as e:
+                print(f"Failed to load {city}: {e}")
+
+    def add_city_card(self, city_name: str, temp: float = None, desc: str = None):
+        card = ft.Container(
+            padding=10,
+            border_radius=8,
+            bgcolor=ft.colors.WHITE,
+            shadow=ft.BoxShadow(
+                spread_radius=1,
+                blur_radius=3,
+                color=ft.colors.with_opacity(0.15, ft.colors.BLACK),
+            ),
+            content=ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                controls=[
+                    ft.Column(
+                        spacing=2,
+                        controls=[
+                            ft.Text(city_name, size=16, weight=ft.FontWeight.BOLD),
+                            ft.Text(
+                                f"{temp}°C • {desc}" if temp and desc else "",
+                                size=12,
+                                color=ft.colors.GREY_700
+                            ),
+                        ]
+                    ),
+                    ft.IconButton(
+                        icon=ft.icons.DELETE,
+                        icon_size=20,
+                        on_click=lambda e: self.remove_city(city_name, card),
+                    )
                 ]
             )
         )
+
+        self.cities_column.controls.append(card)
+        self.page.update()
+
+    def remove_city(self, city_name: str, card):
+        # Remove from UI
+        self.cities_column.controls.remove(card)
+        self.page.update()
+
+        # Remove from JSON
+        if city_name in self.saved_cities:
+            self.saved_cities.remove(city_name)
+            self.save_cities()
+
+    def open_add_city_dialog(self, e):
+        # Text input for city
+        self.city_input_dialog = ft.TextField(
+            label="Enter city name",
+            autofocus=True,
+            hint_text="e.g., Manila"
+        )
+
+        # Dialog setup
+        self.add_city_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Add City"),
+            content=self.city_input_dialog,
+            actions=[
+                ft.TextButton(
+                    "Cancel",
+                    on_click=lambda e: self.close_dialog()
+                ),
+                ft.TextButton(
+                    "Add",
+                    on_click=lambda e: asyncio.create_task(self.add_city_from_dialog())
+                ),
+            ]
+        )
+
+        self.page.dialog = self.add_city_dialog
+        self.add_city_dialog.open = True
+        self.page.update()
+
+    def close_dialog(self):
+        self.add_city_dialog.open = False
+        self.page.update()
+
+    async def add_city_from_dialog(self):
+        city = self.city_input_dialog.value.strip()
+        if not city:
+            return
+
+        # Fetch weather data (your existing method)
+        try:
+            data = await self.weather_service.get_weather(city)
+            temp = data["main"]["temp"]
+            desc = data["weather"][0]["description"].title()
+        except Exception as e:
+            # Show error message if city not found
+            self.page.snack_bar = ft.SnackBar(ft.Text(f"Error: {e}"))
+            self.page.snack_bar.open = True
+            self.page.update()
+            return
+
+        # Add city card to UI
+        self.add_city_card(city, temp, desc)
+
+        # Save to JSON
+        if city not in self.saved_cities:
+            self.saved_cities.append(city)
+            self.save_cities()
+
+        # Close dialog
+        self.close_dialog()
+
+
+
+
 
 
     def show_history(self, e):
@@ -236,12 +426,11 @@ class WeatherApp:
             self.update_history_list()
             self.page.update()
 
-
     def load_history(self):
         """Load search history from file."""
         if self.history_file.exists():
             with open(self.history_file, 'r') as f:
-                return json.load(f)
+                return json.load(f)[:5]
         return []
     
     def save_history(self):
@@ -258,6 +447,72 @@ class WeatherApp:
 
         # Refresh the dropdown UI
         self.update_history_list()
+
+    def callback(self, recognizer, audio):
+        if not self.listening:
+            return
+
+        try:
+            text = recognizer.recognize_google(audio)
+            self.live_text.value = text.title()
+            self.page.update()
+
+            # Stop listening immediately after first recognition
+            self.listening = False
+            if self.mic_stream:
+                self.mic_stream(wait_for_stop=False)
+                self.mic_stream = None
+
+            # Play end sound
+            winsound.PlaySound(Config.END_SOUND, winsound.SND_FILENAME | winsound.SND_ASYNC)
+
+            self.city_input.value = self.live_text.value
+            time.sleep(2) # Delay for 2 seconds
+            self.listening_dialog.open = False
+
+            self.page.update()
+            self.get_weather()
+
+        except sr.UnknownValueError:
+            pass  # ignore noise
+        except Exception as e:
+            self.live_text.value = f"Error: {e}"
+            self.page.update()
+
+    def mic_click(self, e):
+        self.listening = True
+        self.live_text.value = "Say something..."
+        self.listening_dialog.open = True
+        self.page.update()
+
+        # Play start sound
+        winsound.PlaySound(Config.START_SOUND, winsound.SND_FILENAME | winsound.SND_ASYNC)
+
+        # Start background listening
+        def start_listening():
+            mic = sr.Microphone()
+            # self.recognizer.adjust_for_ambient_noise(mic)
+            self.mic_stream = self.recognizer.listen_in_background(mic, self.callback)
+
+
+        threading.Thread(target=start_listening, daemon=True).start()
+
+    def stop_listening(self, e):
+        self.listening = False
+        temp_text = self.city_input.value
+
+        if self.mic_stream:
+            self.mic_stream(wait_for_stop=False)
+            self.mic_stream = None
+
+        if self.live_text.value == "Say something...":
+            pass
+        else:
+            # Final recognized text → put into TextField
+            self.city_input.value = self.live_text.value
+
+        self.listening_dialog.open = False
+        self.page.update()
 
     def toggle_theme(self, e):
         """Toggle between light and dark theme correctly, with instant icon update."""
@@ -276,10 +531,8 @@ class WeatherApp:
         else:
             self.page.theme_mode = ft.ThemeMode.LIGHT
 
-        self.update_theme_icon()
+        self.update_theme_colors()
         self.page.update()
-
-
     
     def on_search(self, e):
         """Handle search button click or enter key press."""
@@ -310,7 +563,6 @@ class WeatherApp:
             # Display weather and forecast
             await self.display_weather(weather_data)
             await self.display_forecast(forecast_data)
-
             
         except Exception as e:
             self.show_error(str(e))
@@ -334,6 +586,9 @@ class WeatherApp:
         self.wind_speed = data.get("wind", {}).get("speed", 0)
         self.pressure = data.get("main",{}).get("pressure", 0)
         self.cloudiness = data.get("clouds",{}).get("all", 0)
+
+        self.min_temp = data.get("main", {}).get("temp_min", 0)
+        self.max_temp = data.get("main", {}).get("temp_max", 0)
 
         self.temperature_text = ft.Text(
             f"{self.temp:.1f}°C",
@@ -370,7 +625,26 @@ class WeatherApp:
                 ft.Text(
                     f"Feels like {feels_like:.1f}°C",
                     size=16,
-                    color=ft.Colors.GREY_700,
+                ),
+
+                ft.Row(
+                    [
+                        ft.Row(
+                            [
+                                ft.Icon(ft.Icons.ARROW_DOWNWARD, size=14),
+                                ft.Text(f"{self.min_temp:.1f}°C", size=14)
+                            ],
+                            spacing=3
+                        ),
+                        ft.Row(
+                            [
+                                ft.Icon(ft.Icons.ARROW_UPWARD, size=14),
+                                ft.Text(f"{self.max_temp:.1f}°C", size=14)
+                            ],
+                            spacing=3
+                        )
+                    ],
+                    spacing=10
                 ),
                 
                 ft.Divider(),
@@ -424,7 +698,6 @@ class WeatherApp:
         self.weather_container.opacity = 1
         self.page.update()
 
-
     async def display_forecast(self, data):
         """Display five-day weather forecast"""
         # Extract data
@@ -433,8 +706,16 @@ class WeatherApp:
         current_date = datetime.date.today()
 
         self.days_container = ft.Row(
-            controls=[self.create_forecast_card(current_date.strftime('%A').upper(), self.icon_code, self.temp, self.humidity, self.wind_speed, self.pressure, self.cloudiness)],
-            expand=2,spacing=10
+            controls=[
+                self.create_forecast_card(
+                    current_date.strftime('%A').upper(),
+                    self.icon_code,
+                    self.temp,
+                    self.min_temp,
+                    self.max_temp)
+                ],
+            expand=True,
+            spacing=10
         )
 
         for i in range(1, 5):
@@ -442,25 +723,34 @@ class WeatherApp:
 
             icon_code = forecast_days[i].get("weather", [{}])[0].get("icon", "01d")
             temperature = forecast_days[i].get("main", {}).get("temp", 0)
-            humidity = forecast_days[i].get("main", {}).get("humidity", 0)
-            wind_speed = forecast_days[i].get("wind", {}).get("speed", 0)
-            pressure = forecast_days[i].get("main",{}).get("pressure", 0)
-            cloudiness = forecast_days[i].get("clouds",{}).get("all", 0)
+            min_temp = forecast_days[i].get("main", {}).get("temp_min", 0)
+            max_temp = forecast_days[i].get("main", {}).get("temp_max", 0)
 
             self.days_container.controls.append(
                 self.create_forecast_card(
                     next_day.strftime('%A').upper(),
                     icon_code,
                     temperature,
-                    humidity,
-                    wind_speed,
-                    pressure,
-                    cloudiness)
+                    min_temp,
+                    max_temp
+                )
             )
 
         # Build forecast display
         self.forecast_container.content = ft.Column(
             [
+                ft.Row(
+                    [
+                        ft.Text("Multi-City Overview", size=24, weight=ft.FontWeight.BOLD),
+                        ft.IconButton(
+                            icon=ft.Icons.ADD,
+                            tooltip="Add City",
+                            on_click=self.open_add_city_dialog
+                        )
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),  
+                self.cities_container,
                 ft.Text(
                     "5-Day Forecast",
                     size=24,
@@ -481,21 +771,23 @@ class WeatherApp:
         await asyncio.sleep(0.1)
         self.forecast_container.opacity = 1
         self.page.update()
-     
-    
-    def create_forecast_card(self, day, icon_code, temp, humidity, wind_speed, pressure, cloudiness):
+
+    def create_forecast_card(self, day, icon_code, temp, min_temp, max_temp):
         def create_info_row(icon, value):
             return ft.Row(
                 [
-                    ft.Icon(icon, size=20, color=ft.Colors.BLUE_500),
+                    ft.Icon(icon, size=14, color=ft.Colors.BLUE_500),
                     ft.Text(
                         value,
                         size=12,
                         weight=ft.FontWeight.BOLD,
                         color=ft.Colors.BLUE_900,
                     )
-                ]
+                ],
+                expand=True,
+                alignment=ft.MainAxisAlignment.CENTER
             )
+        
         return ft.Container(
             content=ft.Column(
                 [
@@ -514,26 +806,21 @@ class WeatherApp:
                     ft.Column(
                         [
                             create_info_row(
-                                ft.Icons.WATER_DROP, f"{humidity}%"
+                                ft.Icons.ARROW_DOWNWARD, f"{min_temp:.1f}°C"
                             ),
                             create_info_row(
-                                ft.Icons.AIR, f"{wind_speed} m/s"
-                            ),
-                            create_info_row(
-                                ft.Icons.COMPRESS, f"{pressure} hPa"
-                            ),
-                            create_info_row(
-                                ft.Icons.CLOUD, f"{cloudiness}%"
+                                ft.Icons.ARROW_UPWARD, f"{max_temp:.1f}°C"
                             )
                         ],
                         spacing=10,
-                        alignment=ft.CrossAxisAlignment.CENTER
-
+                        alignment=ft.MainAxisAlignment.CENTER
                     )
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=20
+                spacing=20,
+                expand=True
             ),
+            expand=True,
             bgcolor=ft.Colors.WHITE,
             border_radius=10,
             padding=15,
@@ -563,7 +850,7 @@ class WeatherApp:
             width=150,
         )
     
-    def update_theme_icon(self):
+    def update_theme_colors(self):
         # Determine actual brightness
         if self.page.theme_mode == ft.ThemeMode.SYSTEM:
             is_light = self.page.platform_brightness == ft.Brightness.LIGHT
@@ -587,19 +874,17 @@ class WeatherApp:
             ft.Colors.BLUE_900 if is_light else ft.Colors.BLUE_50
         )
 
-
     def show_error(self, message: str):
         """Display error message."""
         self.error_message.value = f"❌ {message}"
         self.error_message.visible = True
         self.weather_container.visible = False
+        self.forecast_container.visible = False
         self.page.update()
-
 
 def main(page: ft.Page):
     """Main entry point."""
     WeatherApp(page)
-
 
 if __name__ == "__main__":
     ft.app(target=main)

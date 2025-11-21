@@ -24,6 +24,10 @@ class Config:
     # API Settings
     UNITS = "metric"  # metric, imperial, or standard
     TIMEOUT = 10  # seconds
+
+    START_SOUND = os.path.join(os.path.dirname(__file__), "sounds", "start.wav")
+    END_SOUND = os.path.join(os.path.dirname(__file__), "sounds", "end.wav")
+
     
     @classmethod
     def validate(cls):

@@ -130,4 +130,21 @@ class WeatherService:
             
             return response.json()
         
+    async def get_hourly_forecast(self, city: str) -> Dict:
+        """Get full hourly forecast from One Call API 3.0."""
+        # lat, lon = await self.get_coords(city)
+
+        onecall_url = "https://api.openweathermap.org/data/3.0/onecall"
+        params = {
+            "q": city,
+            "units": "metric",
+            "exclude": "minutely,alerts",
+            "appid": self.api_key,
+        }
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(onecall_url, params=params)
+            response.raise_for_status()
+            return response.json()
+        
     
