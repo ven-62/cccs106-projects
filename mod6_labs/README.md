@@ -46,7 +46,7 @@ This weather app shows users current weather and weather predictions for various
 ### Setup Instructions
 ```bash
 # Clone the repository
-git clone https://github.com/ven-62 /cccs106-projects.git
+git clone https://github.com/ven-62/cccs106-projects.git
 cd cccs106-projects/mod6_labs
 
 # Create virtual environment
@@ -57,5 +57,5 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Create .env file
-cp .env.example .env
+cp .env.example .env   # On Windows: copy .env.example .env
 # Add your OpenWeatherMap API key to .env
