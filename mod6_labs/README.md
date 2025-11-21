@@ -7,31 +7,34 @@
 - **Section**: BSCS 3A
 
 ## Project Overview
-[Brief description of your weather app and what it does]
+This weather app shows users current weather and weather predictions for various cities. Users can search any city and see current conditions and temperature, track multiple locations, get a 5-day forecast, and compare different cities weather. The app focuses on user-friendliness and interactivity, allowing users to add and remove locations, and automatically loading their saved cities. Using real-time information from OpenWeatherMap, this app design helps users see their daily or weekly plans in a clean, user responsive way.
+
 
 ## Features Implemented
 
 ### Base Features
 - [x] City search functionality
 - [x] Current weather display
-- [x] Temperature, humidity, wind speed
+- [x] Temperature, humidity, wind speed, pressure, cloudiness
 - [x] Weather icons
 - [x] Error handling
 - [x] Modern UI with Material Design
 
 ### Enhanced Features
 1. **5-day weather forecast**
-   - Description of what this feature does
-   - Why you chose this feature
-   - Challenges faced and how you solved them
+   - The 5-day forecast feature shows users the upcoming weather for the next five days. This feature shows the weather, temperature, minimum temperature, and maximum temperature.
+   - I chose to include this feature because most people rely on short-term forecasts, and it makes the app feel more useful and complete.
+   - One challenge I ran into was turning the raw API data into clear day-by-day information, and I solved it by carefully grouping the hourly results into organized daily weather forecasst.
 
-2. **[Feature Name]**
-   - Description of what this feature does
-   - Why you chose this feature
-   - Challenges faced and how you solved them
+2. **Multi-city overview**
+   - This let users track and compare weather from other cities at once in a clean and personalized dashboard.
+   - I choose this feature for convience of user whenever they want to compare the weather from several locations. Additionaly, this features makes the app more practical.
+   - A challenge was that user input reset on app close, so I solved it by storing the entered cities in a JSON file.
 
 ## Screenshots
-[Add 3-5 screenshots showing different aspects of your app]
+![Search history](screenshots\search_history.png)
+![Voice input](screenshots\search_history.png)
+
 
 ## Installation
 

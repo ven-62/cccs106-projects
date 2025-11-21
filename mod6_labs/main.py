@@ -29,6 +29,8 @@ class WeatherApp:
         self.setup_page()
         self.build_ui()
 
+        self.page.run_task(self.load_saved_city_cards)
+
         self.recognizer = sr.Recognizer()
         self.mic_stream = None
         self.listening = False
@@ -87,24 +89,6 @@ class WeatherApp:
             on_submit=self.on_search,
             on_change=self.show_history,
             on_blur=self.hide_history,
-        )
-
-        self.live_text = ft.Text("Say something...", size=16)
-
-        self.done_button = ft.TextButton("Done", on_click=self.stop_listening)
-
-        self.listening_dialog = ft.AlertDialog(
-            modal=True,
-            content=ft.Column(
-                [
-                    ft.Text("Listening...", size=20, weight="bold"),
-                    ft.Container(height=10),
-                    self.live_text
-                ],
-                tight=True,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            actions=[self.done_button],
-            actions_alignment=ft.MainAxisAlignment.CENTER,
         )
 
         # Search history
@@ -238,11 +222,14 @@ class WeatherApp:
                         right=50,
                         content=self.history_dropdown
                     ),
-                    self.listening_dialog
                 ],
                 expand=True
             )
         )
+
+    async def on_app_start(self, e):
+        asyncio.create_task(self.load_saved_city_cards())
+
     
     def load_cities(self):
         """Load saved cities from JSON file."""
@@ -259,39 +246,82 @@ class WeatherApp:
         for city in self.saved_cities:
             try:
                 data = await self.weather_service.get_weather(city)
-                temp = data["main"]["temp"]
-                desc = data["weather"][0]["description"].title()
-                self.add_city_card(city, temp, desc)
+                city_name = data.get("name", "Unknown")
+                country = data.get("sys", {}).get("country", "")
+
+                icon_code = data.get("weather", [{}])[0].get("icon", "01d")
+
+                temp = data.get("main", {}).get("temp", 0)
+
+                min_temp = data.get("main", {}).get("temp_min", 0)
+                max_temp = data.get("main", {}).get("temp_max", 0)
+                self.add_city_card(city_name, country, icon_code, temp, min_temp, max_temp)
             except Exception as e:
                 print(f"Failed to load {city}: {e}")
 
-    def add_city_card(self, city_name: str, temp: float = None, desc: str = None):
+    def add_city_card(self, city_name, country, icon_code, temp, min_temp, max_temp):
         card = ft.Container(
             padding=10,
-            border_radius=8,
-            bgcolor=ft.colors.WHITE,
+            border_radius=10,
+            bgcolor=ft.Colors.WHITE,
             shadow=ft.BoxShadow(
                 spread_radius=1,
                 blur_radius=3,
-                color=ft.colors.with_opacity(0.15, ft.colors.BLACK),
+                color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK),
             ),
             content=ft.Row(
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=15,
                 controls=[
-                    ft.Column(
+
+                    # Left side: Weather icon
+                    ft.Image(
+                        src=f"https://openweathermap.org/img/wn/{icon_code}@2x.png",
+                        width=50,
+                        height=50,
+                    ),
+
+                    # City + Country
+                    ft.Text(
+                        f"{city_name}, {country}",
+                        size=16,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.GREY_800,
+                    ),
+
+                    # Current Temp
+                    ft.Text(
+                        f"{temp:.1f}°C",
+                        size=16,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.BLUE_700,
+                    ),
+
+                    # Min Temp with Down Arrow
+                    ft.Row(
                         spacing=2,
                         controls=[
-                            ft.Text(city_name, size=16, weight=ft.FontWeight.BOLD),
-                            ft.Text(
-                                f"{temp}°C • {desc}" if temp and desc else "",
-                                size=12,
-                                color=ft.colors.GREY_700
-                            ),
+                            ft.Icon(ft.Icons.ARROW_DOWNWARD, size=16, color=ft.Colors.BLUE_500),
+                            ft.Text(f"{min_temp:.1f}°C", size=12, color=ft.Colors.GREY_600),
                         ]
                     ),
+
+                    # Max Temp with Up Arrow
+                    ft.Row(
+                        spacing=2,
+                        controls=[
+                            ft.Icon(ft.Icons.ARROW_UPWARD, size=16, color=ft.Colors.BLUE_500),
+                            ft.Text(f"{max_temp:.1f}°C", size=12, color=ft.Colors.GREY_600),
+                        ]
+                    ),
+
+                    # Delete button
                     ft.IconButton(
-                        icon=ft.icons.DELETE,
-                        icon_size=20,
+                        icon=ft.Icons.DELETE,
+                        icon_size=22,
+                        icon_color=ft.Colors.RED_600,
+                        tooltip="Remove city",
                         on_click=lambda e: self.remove_city(city_name, card),
                     )
                 ]
@@ -300,6 +330,12 @@ class WeatherApp:
 
         self.cities_column.controls.append(card)
         self.page.update()
+
+
+    def save_cities(self):
+        """Save search history to file."""
+        with open(self.cities_file, 'w') as f:
+            json.dump(self.saved_cities, f)
 
     def remove_city(self, city_name: str, card):
         # Remove from UI
@@ -316,8 +352,14 @@ class WeatherApp:
         self.city_input_dialog = ft.TextField(
             label="Enter city name",
             autofocus=True,
-            hint_text="e.g., Manila"
+            hint_text="e.g., London, Tokyo, New York",
+            border_color=ft.Colors.BLUE_400,
+            icon=ft.Icons.LOCATION_CITY,
+            expand=True,
         )
+
+        async def on_add_click(e):
+            await self.add_city_from_dialog()
 
         # Dialog setup
         self.add_city_dialog = ft.AlertDialog(
@@ -331,13 +373,12 @@ class WeatherApp:
                 ),
                 ft.TextButton(
                     "Add",
-                    on_click=lambda e: asyncio.create_task(self.add_city_from_dialog())
+                    on_click=on_add_click
                 ),
             ]
         )
 
-        self.page.dialog = self.add_city_dialog
-        self.add_city_dialog.open = True
+        self.page.open(self.add_city_dialog)
         self.page.update()
 
     def close_dialog(self):
@@ -347,13 +388,24 @@ class WeatherApp:
     async def add_city_from_dialog(self):
         city = self.city_input_dialog.value.strip()
         if not city:
+            self.city_input_dialog.error_text = "Please enter a city name"
+            self.page.update()
             return
 
         # Fetch weather data (your existing method)
         try:
             data = await self.weather_service.get_weather(city)
-            temp = data["main"]["temp"]
-            desc = data["weather"][0]["description"].title()
+
+            city_name = data.get("name", "Unknown")
+            country = data.get("sys", {}).get("country", "")
+
+            icon_code = data.get("weather", [{}])[0].get("icon", "01d")
+
+            temp = data.get("main", {}).get("temp", 0)
+
+            min_temp = data.get("main", {}).get("temp_min", 0)
+            max_temp = data.get("main", {}).get("temp_max", 0)
+
         except Exception as e:
             # Show error message if city not found
             self.page.snack_bar = ft.SnackBar(ft.Text(f"Error: {e}"))
@@ -362,7 +414,7 @@ class WeatherApp:
             return
 
         # Add city card to UI
-        self.add_city_card(city, temp, desc)
+        self.add_city_card(city_name, country, icon_code, temp, min_temp, max_temp)
 
         # Save to JSON
         if city not in self.saved_cities:
@@ -371,11 +423,6 @@ class WeatherApp:
 
         # Close dialog
         self.close_dialog()
-
-
-
-
-
 
     def show_history(self, e):
         # Do NOT show dropdown if history is empty
@@ -480,9 +527,27 @@ class WeatherApp:
             self.page.update()
 
     def mic_click(self, e):
+
+        self.live_text = ft.Text("Say something...", size=16)
+
+        self.done_button = ft.TextButton("Done", on_click=self.stop_listening)
+
+        self.listening_dialog = ft.AlertDialog(
+            modal=True,
+            content=ft.Column(
+                [
+                    ft.Text("Listening...", size=20, weight="bold"),
+                    ft.Container(height=10),
+                    self.live_text
+                ],
+                tight=True,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            actions=[self.done_button],
+            actions_alignment=ft.MainAxisAlignment.CENTER,
+        )
         self.listening = True
         self.live_text.value = "Say something..."
-        self.listening_dialog.open = True
+        self.page.open(self.listening_dialog)
         self.page.update()
 
         # Play start sound
